@@ -30,12 +30,14 @@ dataset = datasets.load_digits()
 clf = KNeighborsClassifier(n_neighbors=1)
  
 # wlacz kamere
-camera = cv2.VideoCapture(0)
+cam = cv2.VideoCapture(0)
+char_mask = np.zeros((600, 480), dtype = "uint8")
  
 # keep looping
 while True:
 	# przechwyc obraz
-	(grabbed, frame) = camera.read()
+	#(grabbed, frame) = camera.read()
+	ret, frame = cam.read()
  
 	# zmienia wielkosc przechwyconego obrazu, zamazuje przy uzyciu funkcji gaussianblur
 	# przeksztalca kolor z BGR do HSV
@@ -48,8 +50,8 @@ while True:
 	mask = cv2.inRange(hsv, greenLower, greenUpper)
 	mask = cv2.erode(mask, None, iterations=2)
 	mask = cv2.dilate(mask, None, iterations=2)
-		# find contours in the mask and initialize the current
-	# (x, y) center of the ball
+		# znajdz kontur
+	# (x, y) oraz srodek kolka
 	cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,
 		cv2.CHAIN_APPROX_SIMPLE)[-2]
 	center = None
@@ -63,25 +65,39 @@ while True:
 		M = cv2.moments(c)
 		center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
  
-		# jesli srednica spelnia minimalne wymagania
-		if radius > 10:
-			# narysuj kolo
-			cv2.circle(frame, (int(x), int(y)), int(radius),
-				(0, 255, 255), 2)
-			cv2.circle(frame, center, 5, (0, 0, 255), -1)
+		#narysuj kolo
+		cv2.circle(frame, (int(x), int(y)), int(radius),
+			(0, 255, 255), 2)
+		cv2.circle(frame, center, 5, (0, 0, 255), -1)
  
 	# dodaj punkty do kolejki
 	pts.appendleft(center)
 		# petla po znalezionych punktach
-	for i in xrange(1, len(pts)):
-		# ignoruj punkty None w kolejce
-		if pts[i - 1] is None or pts[i] is None:
-			continue
  
-		# otherwise, compute the thickness of the line and
-		# draw the connecting lines
-		thickness = int(np.sqrt(args["buffer"] / float(i + 1)) * 2.5)
-		cv2.line(frame, pts[i - 1], pts[i], (0, 0, 255), thickness)
+		#rysuj linie
+	
+		cv2.line(frame, pts[i - 1], pts[i], (0, 0, 255), 5)
+
+		if key == ord(" "):
+			char_mask = np.zeros((600, 480), dtype = "uint8")
+
+			#rysuj linie na masce
+
+			for i in xrange(1, len(pts)):
+				
+				cv2.line(char_mask, pts[i - 1], pts[i], (255, 255, 255), 5)
+
+			#popraw
+			cv2.dilate(character_mask, None, iterations=3)
+			#wykryj zewnetrzne kontury, tylko punkty koncowe
+			cnts, _ = cv2.findContours(char_mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+			#znajdz maksymalny kontur narysuj wokol niego prostokat
+			cnt = max(cnts, key=cv2.contourArea)
+			(x, y, w, h) = cv2.boundingRect(cnt)
+
+
+
  
 	# show the frame to our screen
 	cv2.imshow("Frame", frame)
@@ -92,5 +108,5 @@ while True:
 		break
  
 # wyczysc obraz z kamery i zamknij okno
-camera.release()
+
 cv2.destroyAllWindows()

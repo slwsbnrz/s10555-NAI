@@ -8,6 +8,8 @@ import cv2
 from sklearn.cross_validation import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn import datasets
+
+dataset = datasets.load_digits()
  
 #definiuje dlugosc bufora
 ap = argparse.ArgumentParser()
@@ -16,73 +18,76 @@ ap.add_argument("-b", "--buffer", type=int, default=32,
 args = vars(ap.parse_args())
 # definiuje przestrzen zieleni
 # oraz inicjuje kolejke
-# list of tracked points
-greenLower = (29, 86, 6)
-greenUpper = (64, 255, 255)
+
+greenMix = (29, 86, 6)
+greenMax = (64, 255, 255)
 pts = deque(maxlen=args["buffer"])
- 
-# wlacz kamere
-camera = cv2.VideoCapture(0)
- 
-# keep looping
+
+(trainData, testData, trainLabels, testLabels) = train_test_split(dataset.data / 255.0, dataset.target.astype("int0"), test_size = 0)
+
+# stworz klasyfikator 
+model = KNeighborsClassifier(n_neighbors=1)
+
+
+#szkolenie klasyfikatora
+model.fit(trainData, trainLabels)
+
+cap = cv2.VideoCapture()
+frame = imutils.resize(frame, width=600)
+
+# obiekt do przechowywania litery
+char = None
+
 while True:
-	# przechwyc obraz
-	(grabbed, frame) = camera.read()
- 
-	# zmienia wielkosc przechwyconego obrazu, zamazuje przy uzyciu funkcji gaussianblur
-	# przeksztalca kolor z BGR do HSV
-	frame = imutils.resize(frame, width=600)
+
+	# Przechwytywanie klatek
+	ret, frame = cap.read()
+
+	#uzycie funkcji blur
 	blurred = cv2.GaussianBlur(frame, (11, 11), 0)
+	# zmein BGR na HSV 
 	hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
- 
-	# tworzy maske 
-	
-	mask = cv2.inRange(hsv, greenLower, greenUpper)
+
+	#zastosowanie maski by wykryc tylko zielony kolor
+	mask = cv2.inRange(hsv, greenMin, greenMax)
+
+	# redukcja zaklocen
 	mask = cv2.erode(mask, None, iterations=2)
 	mask = cv2.dilate(mask, None, iterations=2)
-		# find contours in the mask and initialize the current
-	# (x, y) center of the ball
-	cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,
-		cv2.CHAIN_APPROX_SIMPLE)[-2]
+
+	# szukaj konturów obiektu
+	contours= cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
+	
+	#zapisz srodek obiektu do center
 	center = None
  
-	# jesli znaleziony jest minimum 1 kontur
-	if len(cnts) > 0:
-		# znajdz najwiekszy kontur
-		# oblicz na podstawie momentow najmniejsze kolko
-		c = max(cnts, key=cv2.contourArea)
-		((x, y), radius) = cv2.minEnclosingCircle(c)
+	# jesli wykryto przynajmniej 1 kontur
+	if len(contours) > 0:
+
+		#znajdz maksymalny kontur
+		c = max(contours, key=cv2.contourArea)
+
+		#wyznacz najmniejszy kontur przedmiotu
+		(x, y) = cv2.minEnclosingCircle(c)
+		
+		# znajdz srodek obiektu
 		M = cv2.moments(c)
+
+		 # wyznacz srodek okregu za pomoca momentow
 		center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
- 
-		# jesli srednica spelnia minimalne wymagania
-		if radius > 10:
-			# narysuj kolo
-			cv2.circle(frame, (int(x), int(y)), int(radius),
-				(0, 255, 255), 2)
-			cv2.circle(frame, center, 5, (0, 0, 255), -1)
- 
-	# dodaj punkty do kolejki
-	pts.appendleft(center)
-		# petla po znalezionych punktach
-	for i in xrange(1, len(pts)):
-		# ignoruj punkty None w kolejce
-		if pts[i - 1] is None or pts[i] is None:
-			continue
- 
-		# otherwise, compute the thickness of the line and
-		# draw the connecting lines
-		thickness = int(np.sqrt(args["buffer"] / float(i + 1)) * 2.5)
-		cv2.line(frame, pts[i - 1], pts[i], (0, 0, 255), thickness)
- 
-	# show the frame to our screen
-	cv2.imshow("Frame", frame)
+		
+		# dodanie do kolejki srodka okregu	
+		pts.appendleft(center)
+
+		for i in xrange(1, len(pts)):
+
+			## rysuj linie 
+			cv2.line(frame, pts[i - 1], pts[i], (0, 0, 255), 5)
+
 	key = cv2.waitKey(1) & 0xFF
- 
-	# zamyka okno konsoli przy nacisnieciu klawisza q
 	if key == ord("q"):
 		break
- 
-# wyczysc obraz z kamery i zamknij okno
-camera.release()
+	elif key == ord("r"):
+		pts.clear()
+
 cv2.destroyAllWindows()
